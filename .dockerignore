@@ -1,0 +1,16 @@
+
+---
+
+## 📄 `.dockerignore`
+
+```dockerignore
+# Ignore sensitive and unnecessary files
+*.crt
+*.key
+*.pfx
+*.log
+
+**/bin/
+**/obj/
+
+.vscode/

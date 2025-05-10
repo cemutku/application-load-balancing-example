@@ -1,0 +1,36 @@
+# 🔐 TLS Certificates and Keys
+nginx/certs/*.crt
+nginx/certs/*.key
+nginx/certs/*.pem
+nginx/certs/*.pfx
+nginx/certs/*.csr
+nginx/certs/*.cer
+nginx/certs/*.der
+
+# ⚙️ .NET Build Artifacts
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# 🧪 Test & Debug Output
+TestResult.xml
+*.coverage
+*.coveragejson
+
+# 🧹 Logs & Temp Files
+*.log
+*.tmp
+
+# 🧠 IDEs / Editors
+.vscode/
+.idea/
+*.sln.docstates
+
+# 🍏 macOS
+.DS_Store
+
+# 🐳 Docker
+*.pid
+.env.local
+docker-compose.override.yml

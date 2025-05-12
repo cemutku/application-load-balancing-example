@@ -10,7 +10,7 @@
 *.pfx
 *.log
 
-**/bin/
+**/bin/ 
 **/obj/
 
 .vscode/

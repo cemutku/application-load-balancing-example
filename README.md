@@ -2,11 +2,12 @@
 
 This project demonstrates a secure, production-style application load balancing setup using:
 
-- 🔹 ASP.NET Core Web APIs (Service A and B)
+- 🔹 .NET Web APIs (Service A and B)
 - 🔹 NGINX as a reverse proxy and HTTPS terminator
 - 🔹 Docker Compose for orchestration
 - 🔹 HTTPS via self-signed TLS certificates
 - 🔹 Health checks and logging
+- 🔹 Circuit breaker and retry
 
 ---
 

@@ -1,6 +1,11 @@
+using System.Diagnostics;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Extensions.Http;
+using ServiceA;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +13,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddHttpClient("ServiceB", client =>
 {
-    client.BaseAddress = new Uri("http://localhost:5001");
+    client.BaseAddress = new Uri("http://serviceb");
 })
 .AddPolicyHandler(GetRetryPolicy())
 .AddPolicyHandler(GetCircuitBreakerPolicy());
@@ -18,21 +23,67 @@ builder.Logging.Configure(options =>
     options.ActivityTrackingOptions = ActivityTrackingOptions.SpanId | ActivityTrackingOptions.TraceId;
 });
 
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
+});
+
+var activitySource = new ActivitySource("ServiceA.Activity");
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("ServiceA"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter(opt =>
+            {
+                opt.Endpoint = new Uri("http://jaeger:4317");
+            });
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("ServiceA"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddPrometheusExporter();
+    });
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(80);      // Main API
+    options.ListenAnyIP(9184);    // Metrics
+});
 
 var app = builder.Build();
+
+app.MapPrometheusScrapingEndpoint("/metrics");
 
 app.UseRouting();
 
 app.Use(async (context, next) =>
 {
-    var sw = System.Diagnostics.Stopwatch.StartNew();
-    await next();
-    sw.Stop();
     var logger = app.Logger;
-    logger.LogInformation("andled {Method} {Path} in {Elapsed} ms",
+    var containerName = Environment.MachineName;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+
+    await next();
+
+    sw.Stop();
+
+    var activity = System.Diagnostics.Activity.Current;
+    var traceId = activity?.TraceId.ToString() ?? context.TraceIdentifier;
+
+    logger.LogInformation("HTTP {Method} {Path} responded {StatusCode} in {Elapsed}ms | Container={Container} TraceId={TraceId}",
         context.Request.Method,
         context.Request.Path,
-        sw.ElapsedMilliseconds);
+        context.Response.StatusCode,
+        sw.ElapsedMilliseconds,
+        containerName,
+        traceId);
 });
 
 app.MapGet("/", (HttpContext context) =>
@@ -46,13 +97,19 @@ app.MapGet("/serviceb-hello", async (
     IHttpClientFactory httpClientFactory,
     ILogger<Program> logger) =>
 {
+    using var activity = activitySource.StartActivity("Call ServiceB");
+
+    activity?.SetTag("caller.service", "ServiceA");
+    activity?.SetTag("target.service", "ServiceB");
+    activity?.SetTag("custom.trace", "true");
+
     try
     {    
-        var httpClient = httpClientFactory.CreateClient("ServiceB");            
-        var response = await httpClient.GetAsync("/");
-        
-        logger.LogWarning("called B ");
-        
+        var httpClient = httpClientFactory.CreateClient("ServiceB");        
+        var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.AddTracingHeaders();
+        var response = await httpClient.SendAsync(request);
+                
         response.EnsureSuccessStatusCode();
         return Results.Text(await response.Content.ReadAsStringAsync());
     }
@@ -73,7 +130,6 @@ app.MapGet("/serviceb-hello", async (
         throw;
     }
 });
-
 
 app.MapGet("/health", () => Results.Ok("A is Healthy"));
 

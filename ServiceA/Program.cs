@@ -6,8 +6,13 @@ using Polly;
 using Polly.CircuitBreaker;
 using Polly.Extensions.Http;
 using ServiceA;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    ConnectionMultiplexer.Connect("redis-replica:6379")
+);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -132,6 +137,21 @@ app.MapGet("/serviceb-hello", async (
 });
 
 app.MapGet("/health", () => Results.Ok("A is Healthy"));
+
+app.MapGet("/counter", async (IConnectionMultiplexer redis) =>    
+{
+    var logger = app.Logger;
+    
+    var db = redis.GetDatabase();
+    var endpoint = redis.GetEndPoints().FirstOrDefault();
+    var serverInfo = endpoint?.ToString() ?? "unknown";
+
+    var count = await db.StringGetAsync("counter");
+
+    logger.LogInformation("🔹 [READ] Counter read as {count} via {server}", count, serverInfo);
+
+    return Results.Ok(new { counter = (int)count });
+});
 
 app.Run("http://+:80");
 

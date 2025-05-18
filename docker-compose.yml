@@ -59,5 +59,17 @@ services:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+  redis-primary:
+    image: redis:latest
+    container_name: redis-primary
+    ports:
+      - "6379:6379" # optional can be removed if not testing locally
+    command: ["redis-server"]
+  redis-replica:
+    image: redis:latest
+    container_name: redis-replica
+    depends_on:
+      - redis-primary
+    command: ["redis-server", "--replicaof", "redis-primary", "6379"]
 volumes:
   nginx_cache:

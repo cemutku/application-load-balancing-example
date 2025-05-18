@@ -1,8 +1,13 @@
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    ConnectionMultiplexer.Connect("redis-primary:6379")
+);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -84,6 +89,21 @@ app.MapGet("/", (HttpContext context, ILogger<Program> logger) =>
 });
 
 app.MapGet("/health", () => Results.Ok("B is Healthy"));
+
+app.MapPost("/counter/increment", async (IConnectionMultiplexer redis) =>
+{
+    var logger = app.Logger;
+
+    var db = redis.GetDatabase();
+    var endpoint = redis.GetEndPoints().FirstOrDefault();
+    var serverInfo = endpoint?.ToString() ?? "unknown";
+
+    var count = await db.StringIncrementAsync("counter");
+
+    logger.LogInformation("🔸 [WRITE] Counter incremented to {count} via {server}", count, serverInfo);
+    
+    return Results.Ok(new { counter = count });
+});
 
 app.Run("http://+:80");
 // app.Run();

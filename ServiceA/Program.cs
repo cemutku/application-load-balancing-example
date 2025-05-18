@@ -10,9 +10,17 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    ConnectionMultiplexer.Connect("redis-replica:6379")
-);
+builder.Services.AddSingleton(serviceProvider =>
+{
+    var shardA = ConnectionMultiplexer.Connect("redis-a-replica:6379");
+    var shardB = ConnectionMultiplexer.Connect("redis-b-replica:6379");
+
+    return new Dictionary<string, IConnectionMultiplexer>
+    {
+        ["even"] = shardA,
+        ["odd"] = shardB
+    };
+});
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -138,19 +146,23 @@ app.MapGet("/serviceb-hello", async (
 
 app.MapGet("/health", () => Results.Ok("A is Healthy"));
 
-app.MapGet("/counter", async (IConnectionMultiplexer redis) =>    
+app.MapGet("/counter/{id:int}", async (int id, Dictionary<string, IConnectionMultiplexer> shards) =>    
 {
     var logger = app.Logger;
-    
+
+    var shardKey = id % 2 == 0 ? "even" : "odd";
+    var redis = shards[shardKey];
+
     var db = redis.GetDatabase();
     var endpoint = redis.GetEndPoints().FirstOrDefault();
     var serverInfo = endpoint?.ToString() ?? "unknown";
 
+    var key = $"counter:{id}";
     var count = await db.StringGetAsync("counter");
+    
+    logger.LogInformation("🔍 [READ] Counter {key} = {count} from {shard} - {server}", key, count, shardKey, serverInfo);
 
-    logger.LogInformation("🔹 [READ] Counter read as {count} via {server}", count, serverInfo);
-
-    return Results.Ok(new { counter = (int)count });
+    return Results.Ok(new { key, counter = (int)count, shard = shardKey });
 });
 
 app.Run("http://+:80");

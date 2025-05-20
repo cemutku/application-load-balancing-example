@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   servicea:
-    build: ./ServiceA
+    build:
+      context: .
+      dockerfile: ServiceA/Dockerfile
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 5s
@@ -12,7 +14,9 @@ services:
       replicas: 2
 
   serviceb:
-    build: ./ServiceB
+    build:
+      context: .
+      dockerfile: ServiceB/Dockerfile
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 5s

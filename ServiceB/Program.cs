@@ -2,20 +2,18 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
+using Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton(serviceProvider =>
+var shardMap = new Dictionary<string, IConnectionMultiplexer>
 {
-    var shardA = ConnectionMultiplexer.Connect("redis-a:6379");
-    var shardB = ConnectionMultiplexer.Connect("redis-b:6379");
+    ["shard-a"] = ConnectionMultiplexer.Connect("redis-a:6379"),
+    ["shard-b"] = ConnectionMultiplexer.Connect("redis-b:6379")
+};
 
-    return new Dictionary<string, IConnectionMultiplexer>
-    {
-        ["even"] = shardA,
-        ["odd"] = shardB
-    };
-});
+builder.Services.AddSingleton(serviceProvider => shardMap);
+builder.Services.AddSingleton(serviceProvider => new ConsistentHashRing<string>(shardMap.Keys));
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -98,23 +96,28 @@ app.MapGet("/", (HttpContext context, ILogger<Program> logger) =>
 
 app.MapGet("/health", () => Results.Ok("B is Healthy"));
 
-app.MapPost("/counter/increment/{id:int}", async (int id, Dictionary<string, IConnectionMultiplexer> shards) =>
+app.MapPost("/counter/increment/{id:int}", async (int id,
+Dictionary<string, IConnectionMultiplexer> shards,
+ConsistentHashRing<string> ring) =>
 {
-    var logger = app.Logger;
+    var logger = app.Logger;    
 
-    var shardKey = id % 2 == 0 ? "even" : "odd";
-    var redis = shards[shardKey];
-    var db = redis.GetDatabase();
+    // var shardKey = id % 2 == 0 ? "even" : "odd";
+    // var redis = shards[shardKey];
+    // var db = redis.GetDatabase();
 
     var key = $"counter:{id}";
+    var nodeName = ring.GetNode(key);
+    var redis = shards[nodeName];
+    var db = redis.GetDatabase();
     var endpoint = redis.GetEndPoints().FirstOrDefault();
     var serverInfo = endpoint?.ToString() ?? "unknown";
 
     var count = await db.StringIncrementAsync("counter");
 
-    logger.LogInformation("📝 [WRITE] Counter {key} -> {count} via {shard} - {server}", key, count, shardKey, serverInfo);
+    logger.LogInformation("📝 [WRITE] Counter {key} -> {count} via {node} - {server}", key, count, nodeName, serverInfo);
 
-    return Results.Ok(new { key, counter = count, shard = shardKey });
+    return Results.Ok(new { key, counter = count, node = nodeName });
 });
 
 app.Run("http://+:80");

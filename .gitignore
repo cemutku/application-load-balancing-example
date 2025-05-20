@@ -24,6 +24,7 @@ TestResult.xml
 
 # 🧠 IDEs / Editors
 .vscode/
+.vs/
 .idea/
 *.sln.docstates
 

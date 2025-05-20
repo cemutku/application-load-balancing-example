@@ -11,6 +11,11 @@ public class ConsistentHashRing<T>
 
     public SortedDictionary<int, T> Circle => _circle;
 
+    /*
+    * Each node gets 100 positions (virtual nodes) on the hash ring.
+    * The ring becomes evenly populated - more balanced
+    * Key movement Minimal (≈ 1/N keys move). It might be highly disruptive if we make it one point per node.
+    */
     public ConsistentHashRing(IEnumerable<T> nodes, int replicas = 100)
     {
         _replicas = replicas;

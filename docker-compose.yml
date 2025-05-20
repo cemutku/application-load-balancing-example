@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: ServiceA/Dockerfile
+    environment:
+      - REDIS_SHARDS=shard-a:redis-a-replica:6379;shard-b:redis-b-replica:6379
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 5s
@@ -17,6 +19,8 @@ services:
     build:
       context: .
       dockerfile: ServiceB/Dockerfile
+    environment:
+      - REDIS_SHARDS=shard-a:redis-a:6379;shard-b:redis-b:6379
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 5s

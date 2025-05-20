@@ -6,11 +6,20 @@ using Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var shardMap = new Dictionary<string, IConnectionMultiplexer>
-{
-    ["shard-a"] = ConnectionMultiplexer.Connect("redis-a:6379"),
-    ["shard-b"] = ConnectionMultiplexer.Connect("redis-b:6379")
-};
+var redisShards = Environment.GetEnvironmentVariable("REDIS_SHARDS") ?? string.Empty;
+var shardMap = redisShards
+    .Split(';', StringSplitOptions.RemoveEmptyEntries)
+    .Select(entry => entry.Split(':'))
+    .ToDictionary(
+        parts => parts[0],
+        parts => (IConnectionMultiplexer)ConnectionMultiplexer.Connect($"{parts[1]}:{parts[2]}")
+    );
+
+// var shardMap = new Dictionary<string, IConnectionMultiplexer>
+// {
+//     ["shard-a"] = ConnectionMultiplexer.Connect("localhost:6379"),
+//     ["shard-b"] = ConnectionMultiplexer.Connect("localhost:6381"),
+// };
 
 builder.Services.AddSingleton(serviceProvider => shardMap);
 builder.Services.AddSingleton(serviceProvider => new ConsistentHashRing<string>(shardMap.Keys));
